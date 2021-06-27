@@ -1567,10 +1567,11 @@ func (kl *Kubelet) syncPod(o syncPodOptions) error {
 
 	// Create Cgroups for the pod and apply resource parameters
 	// to them if cgroups-per-qos flag is enabled.
+	// 在这里完成podContainerManager的实例化，qosContainerInfo是通过Start() 方法完成的
 	pcm := kl.containerManager.NewPodContainerManager()
 	// If pod has already been terminated then we need not create
 	// or update the pod's cgroup
-	if !kl.podIsTerminated(pod) {
+	if !kl.podIsTerminated(pod) { // failed or succeeded are Terminated state.
 		// When the kubelet is restarted with the cgroups-per-qos
 		// flag enabled, all the pod's running containers
 		// should be killed intermittently and brought back up

@@ -169,6 +169,8 @@ type KubeletFlags struct {
 	KeepTerminatedPodVolumes bool
 	// EnableCAdvisorJSONEndpoints enables some cAdvisor endpoints that will be removed in future versions
 	EnableCAdvisorJSONEndpoints bool
+	// EnableSystemPodReserved NiuJinlin: 用于开启将Pod设置为kube-reserved组件的功能
+	// EnableSystemPodReserved bool  临时注释，以后用于实现开关
 }
 
 // NewKubeletFlags will create a new KubeletFlags with default values

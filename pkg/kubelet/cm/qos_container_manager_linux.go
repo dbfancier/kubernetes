@@ -39,6 +39,8 @@ const (
 	// how often the qos cgroup manager will perform periodic update
 	// of the qos level cgroup resource constraints
 	periodicQOSCgroupUpdateInterval = 1 * time.Minute
+	PodQOSBurstableReserved = "BurstableReserved"
+	PodQOSBestEffortReserved = "BestEffortReserved"
 )
 
 type QOSContainerManager interface {
@@ -55,6 +57,8 @@ type qosContainerManagerImpl struct {
 	activePods         ActivePodsFunc
 	getNodeAllocatable func() v1.ResourceList
 	cgroupRoot         CgroupName
+	cgroupRootReserved string     // NiuJinlin: 用于新功能
+	podReserved		   bool       // NiuJinlin: 用于新功能
 	qosReserved        map[v1.ResourceName]int64
 }
 
@@ -65,23 +69,39 @@ func NewQOSContainerManager(subsystems *CgroupSubsystems, cgroupRoot CgroupName,
 		}, nil
 	}
 
+	// NiuJinlin
+	var kubeReservedCgroupName, cgroupRootReserved string
+	var podReserved bool = true // 暂时不关闭
+
+	kubeReservedCgroupName = nodeConfig.NodeAllocatableConfig.KubeReservedCgroupName
+	if kubeReservedCgroupName != nil {
+		cgroupRootReserved = kubeReservedCgroupName
+	}
+
 	return &qosContainerManagerImpl{
 		subsystems:    subsystems,
 		cgroupManager: cgroupManager,
 		cgroupRoot:    cgroupRoot,
 		qosReserved:   nodeConfig.QOSReserved,
+		cgroupRootReserved: cgroupRootReserved ,// NiuJinlin
+		podReserved: podReserved ,
 	}, nil
 }
 
 func (m *qosContainerManagerImpl) GetQOSContainersInfo() QOSContainersInfo {
 	return m.qosContainersInfo
 }
-
+// TODO(NiuJinlin): 修改实例化时添加新的参数, 初始化 cgroupRootReserved 和 podReserved
 func (m *qosContainerManagerImpl) Start(getNodeAllocatable func() v1.ResourceList, activePods ActivePodsFunc) error {
 	cm := m.cgroupManager
 	rootContainer := m.cgroupRoot
+	reservedRootContainer := CgroupName{ m.cgroupRootReserved } // NiuJinlin: string -> podruntime
+
 	if !cm.Exists(rootContainer) {
 		return fmt.Errorf("root container %v doesn't exist", rootContainer)
+	}
+	if !cm.Exists(reservedRootContainer) {
+		return fmt.Errorf("pod reserved container %v does not exists.", reservedRootContainer)
 	}
 
 	// Top level for Qos containers are created only for Burstable
@@ -91,11 +111,19 @@ func (m *qosContainerManagerImpl) Start(getNodeAllocatable func() v1.ResourceLis
 		v1.PodQOSBestEffort: NewCgroupName(rootContainer, strings.ToLower(string(v1.PodQOSBestEffort))),
 	}
 
+	// NiuJinlin: 判断是否开启podReserved特性门, 如果开启则创建相应的cgroup，大致创建格式如下:
+	// /sys/fs/cgroup/memory/podruntime.slice/podruntime-burstable.slice
+	// /sys/fs/cgroup/memory/podruntime.slice/podruntime-besteffort.slice
+	if m.podReserved {
+		qosClasses[PodQOSBurstableReserved] = NewCgroupName(reservedRootContainer, strings.ToLower(string(v1.PodQOSBurstable)))
+		qosClasses[PodQOSBestEffortReserved] = NewCgroupName(reservedRootContainer, strings.ToLower(string(v1.PodQOSBestEffort)))
+	}
+
 	// Create containers for both qos classes
 	for qosClass, containerName := range qosClasses {
 		resourceParameters := &ResourceConfig{}
 		// the BestEffort QoS class has a statically configured minShares value
-		if qosClass == v1.PodQOSBestEffort {
+		if qosClass == v1.PodQOSBestEffort || qosClass == PodQOSBestEffortReserved {
 			minShares := uint64(MinShares)
 			resourceParameters.CpuShares = &minShares
 		}
@@ -122,10 +150,14 @@ func (m *qosContainerManagerImpl) Start(getNodeAllocatable func() v1.ResourceLis
 		}
 	}
 	// Store the top level qos container names
+	// NiuJinlin: 增加qosClasses
 	m.qosContainersInfo = QOSContainersInfo{
 		Guaranteed: rootContainer,
 		Burstable:  qosClasses[v1.PodQOSBurstable],
 		BestEffort: qosClasses[v1.PodQOSBestEffort],
+		GuaranteedReserved: reservedRootContainer,
+		BurstableReserved: qosClasses[PodQOSBurstableReserved],
+		BestEffortReserved: qosClasses[PodQOSBestEffortReserved] ,
 	}
 	m.getNodeAllocatable = getNodeAllocatable
 	m.activePods = activePods

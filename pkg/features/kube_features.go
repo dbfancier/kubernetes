@@ -690,6 +690,12 @@ const (
 	//
 	// Enables the usage of different protocols in the same Service with type=LoadBalancer
 	MixedProtocolLBService featuregate.Feature = "MixedProtocolLBService"
+
+	// owner: @niujinlin
+	// alpha: v1.18
+	//
+	// TWL特定功能，用于将特定Pod存放至--kube-reserved-cgroups当中
+	PodReserved featuregate.Feature = "PodReserved"
 )
 
 func init() {

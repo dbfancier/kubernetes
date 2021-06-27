@@ -677,11 +677,11 @@ func (m *kubeGenericRuntimeManager) SyncPod(pod *v1.Pod, podStatus *kubecontaine
 	podContainerChanges := m.computePodActions(pod, podStatus)
 	klog.V(3).Infof("computePodActions got %+v for pod %q", podContainerChanges, format.Pod(pod))
 	if podContainerChanges.CreateSandbox {
-		ref, err := ref.GetReference(legacyscheme.Scheme, pod)
+		ref, err := ref.GetReference(legacyscheme.Scheme, pod) // 获取该Pod的关联对象
 		if err != nil {
 			klog.Errorf("Couldn't make a ref to pod %q: '%v'", format.Pod(pod), err)
 		}
-		if podContainerChanges.SandboxID != "" {
+		if podContainerChanges.SandboxID != "" {  // PodSandbox ID 不为空，则需要重建Sandbox，如果为空证明为第一次创建
 			m.recorder.Eventf(ref, v1.EventTypeNormal, events.SandboxChanged, "Pod sandbox changed, it will be killed and re-created.")
 		} else {
 			klog.V(4).Infof("SyncPod received new pod %q, will create a sandbox for it", format.Pod(pod))
@@ -689,25 +689,26 @@ func (m *kubeGenericRuntimeManager) SyncPod(pod *v1.Pod, podStatus *kubecontaine
 	}
 
 	// Step 2: Kill the pod if the sandbox has changed.
-	if podContainerChanges.KillPod {
+	if podContainerChanges.KillPod { // podContainerChanges.KillPod -> CreateSandbox, 只要Sandbox Changed，就需要KillPod
 		if podContainerChanges.CreateSandbox {
 			klog.V(4).Infof("Stopping PodSandbox for %q, will start new one", format.Pod(pod))
 		} else {
 			klog.V(4).Infof("Stopping PodSandbox for %q because all other containers are dead.", format.Pod(pod))
 		}
 
-		killResult := m.killPodWithSyncResult(pod, kubecontainer.ConvertPodStatusToRunningPod(m.runtimeName, podStatus), nil)
-		result.AddPodSyncResult(killResult)
+		killResult := m.killPodWithSyncResult(pod, kubecontainer.ConvertPodStatusToRunningPod(m.runtimeName, podStatus), nil) //gracePeriodOverrride -> graceTime
+		result.AddPodSyncResult(killResult)                                                                               // send SIGTERM -> MainContainer Process -> graceful stop
 		if killResult.Error() != nil {
 			klog.Errorf("killPodWithSyncResult failed: %v", killResult.Error())
 			return
 		}
 
 		if podContainerChanges.CreateSandbox {
-			m.purgeInitContainers(pod, podStatus)
+			m.purgeInitContainers(pod, podStatus)  // 移除所有的initContainer，清理掉之前成功执行的initContainer
 		}
 	} else {
 		// Step 3: kill any running containers in this pod which are not to keep.
+		// Container 状态Unknown、not running等状态，需要Kill掉
 		for containerID, containerInfo := range podContainerChanges.ContainersToKill {
 			klog.V(3).Infof("Killing unwanted container %q(id=%q) for pod %q", containerInfo.name, containerID, format.Pod(pod))
 			killContainerResult := kubecontainer.NewSyncResult(kubecontainer.KillContainer, containerInfo.name)

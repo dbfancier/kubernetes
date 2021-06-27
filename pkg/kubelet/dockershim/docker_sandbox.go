@@ -61,6 +61,7 @@ var (
 	defaultSandboxGracePeriod = time.Duration(10) * time.Second
 )
 
+
 // Returns whether the sandbox network is ready, and whether the sandbox is known
 func (ds *dockerService) getNetworkReady(podSandboxID string) (bool, bool) {
 	ds.networkReadyLock.Lock()
@@ -618,7 +619,7 @@ func (ds *dockerService) applySandboxResources(hc *dockercontainer.HostConfig, l
 }
 
 // makeSandboxDockerConfig returns dockertypes.ContainerCreateConfig based on runtimeapi.PodSandboxConfig.
-func (ds *dockerService) makeSandboxDockerConfig(c *runtimeapi.PodSandboxConfig, image string) (*dockertypes.ContainerCreateConfig, error) {
+	func (ds *dockerService) makeSandboxDockerConfig(c *runtimeapi.PodSandboxConfig, image string) (*dockertypes.ContainerCreateConfig, error) {
 	// Merge annotations and labels because docker supports only labels.
 	labels := makeLabels(c.GetLabels(), c.GetAnnotations())
 	// Apply a label to distinguish sandboxes from regular containers.

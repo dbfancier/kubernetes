@@ -164,6 +164,7 @@ func Run(ctx context.Context, cc *schedulerserverconfig.CompletedConfig, sched *
 			return false
 		}
 	}
+	// 这里只是定义了channel和确定是不是Leader的方式，还没有调用
 
 	// Start up the healthz server.
 	if cc.InsecureServing != nil {
@@ -196,6 +197,7 @@ func Run(ctx context.Context, cc *schedulerserverconfig.CompletedConfig, sched *
 
 	// If leader election is enabled, runCommand via LeaderElector until done and exit.
 	if cc.LeaderElection != nil {
+		// 在成为leader的时候，关闭channel，失败的时候打印日志。（这里是定义CallBack函数）
 		cc.LeaderElection.Callbacks = leaderelection.LeaderCallbacks{
 			OnStartedLeading: func(ctx context.Context) {
 				close(waitingForLeader)
@@ -205,6 +207,7 @@ func Run(ctx context.Context, cc *schedulerserverconfig.CompletedConfig, sched *
 				klog.Fatalf("leaderelection lost")
 			},
 		}
+		// 创建leaderElecctor，然后运行Leader Elector
 		leaderElector, err := leaderelection.NewLeaderElector(*cc.LeaderElection)
 		if err != nil {
 			return fmt.Errorf("couldn't create leader elector: %v", err)

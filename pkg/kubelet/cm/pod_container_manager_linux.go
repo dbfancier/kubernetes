@@ -32,6 +32,7 @@ import (
 
 const (
 	podCgroupNamePrefix = "pod"
+	podLabelPodReserved = "kube-reserved"
 )
 
 // podContainerManagerImpl implements podContainerManager interface.
@@ -101,18 +102,40 @@ func (m *podContainerManagerImpl) EnsureExists(pod *v1.Pod) error {
 	return nil
 }
 
+// NiuJinlin: 判断标签是否存在
+func labelExists(pod *v1.Pod, labels []string) bool {
+	 for label := range labels {
+	 	_, exists := pod.ObjectMeta.Labels[label]
+	 	if !exists { return false }
+	 }
+	 return true
+}
+
 // GetPodContainerName returns the CgroupName identifier, and its literal cgroupfs form on the host.
 func (m *podContainerManagerImpl) GetPodContainerName(pod *v1.Pod) (CgroupName, string) {
 	podQOS := v1qos.GetPodQOS(pod)
+	reserved := labelExists(pod, podLabelPodReserved)
 	// Get the parent QOS container name
 	var parentContainer CgroupName
-	switch podQOS {
-	case v1.PodQOSGuaranteed:
-		parentContainer = m.qosContainersInfo.Guaranteed
-	case v1.PodQOSBurstable:
-		parentContainer = m.qosContainersInfo.Burstable
-	case v1.PodQOSBestEffort:
-		parentContainer = m.qosContainersInfo.BestEffort
+	// NiuJinlin:
+	if reserved {
+		switch {
+		case v1.PodQOSGuaranteed:
+			parentContainer = m.qosContainersInfo.GuaranteedReserved
+		case v1.PodQOSBurstable:
+			parentContainer = m.qosContainersInfo.BurstableReserved
+		case v1.PodQOSBestEffort:
+			parentContainer = m.qosContainersInfo.BestEffortReserved
+		}
+	} else {
+		switch {
+		case v1.PodQOSGuaranteed:
+			parentContainer = m.qosContainersInfo.Guaranteed
+		case v1.PodQOSBurstable:
+			parentContainer = m.qosContainersInfo.Burstable
+		case v1.PodQOSBestEffort:
+			parentContainer = m.qosContainersInfo.BestEffort
+		}
 	}
 	podContainer := GetPodCgroupNameSuffix(pod.UID)
 
